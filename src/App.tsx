@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useId } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import {
   Wrench,
   Cog,
@@ -30,7 +30,13 @@ import {
   Sliders,
   ChevronDown,
   Hammer,
-  DraftingCompass
+  DraftingCompass,
+  Plus,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  AlertTriangle,
+  Check
 } from 'lucide-react';
 
 import ballPressImage from './assets/images/hydraulic_ball_press_machine_1793693229906.jpg';
@@ -276,6 +282,229 @@ export default function App() {
   const [selectedProduct, setSelectedProduct] = useState<ProductCatalogItem | null>(null);
   const [heroViewMode, setHeroViewMode] = useState<'photo' | 'cad'>('photo');
 
+  // Product Catalog State with LocalStorage Persistence
+  const [products, setProducts] = useState<ProductCatalogItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('pmj_products_catalog');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load products from localStorage', e);
+    }
+    return CATALOG_ITEMS;
+  });
+
+  // Save to localStorage on change
+  useEffect(() => {
+    try {
+      localStorage.setItem('pmj_products_catalog', JSON.stringify(products));
+    } catch (e) {
+      console.error('Failed to save products to localStorage', e);
+    }
+  }, [products]);
+
+  // Management (Admin) Mode State
+  const [isManageMode, setIsManageMode] = useState<boolean>(false);
+  const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<ProductCatalogItem | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Form State for Adding / Editing Product
+  const [productForm, setProductForm] = useState<{
+    name: string;
+    category: 'press' | 'perkakas' | 'pangan' | 'pertanian' | 'otomasi';
+    shortDesc: string;
+    image: string;
+    specs: { key: string; value: string }[];
+    applications: string;
+    isFeatured: boolean;
+  }>({
+    name: '',
+    category: 'press',
+    shortDesc: '',
+    image: '',
+    specs: [
+      { key: 'Dimensi', value: '' },
+      { key: 'Rangka', value: '' },
+      { key: 'Penggerak', value: '' },
+      { key: 'Kapasitas', value: '' }
+    ],
+    applications: '',
+    isFeatured: false
+  });
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3500);
+  };
+
+  const getCategoryLabel = (cat: 'press' | 'perkakas' | 'pangan' | 'pertanian' | 'otomasi') => {
+    switch (cat) {
+      case 'press': return 'Mesin Press & Daur Ulang';
+      case 'perkakas': return 'Mesin Perkakas';
+      case 'pangan': return 'Pengolahan Pangan';
+      case 'pertanian': return 'Pertanian & Agro';
+      case 'otomasi': return 'Otomasi & Konveyor';
+      default: return 'Mesin Produksi';
+    }
+  };
+
+  // Open modal to add a new product
+  const openAddProductModal = () => {
+    setEditingProductId(null);
+    setProductForm({
+      name: '',
+      category: 'press',
+      shortDesc: '',
+      image: '',
+      specs: [
+        { key: 'Dimensi', value: '' },
+        { key: 'Rangka', value: '' },
+        { key: 'Penggerak', value: '' },
+        { key: 'Kapasitas', value: '' }
+      ],
+      applications: '',
+      isFeatured: false
+    });
+    setIsProductFormOpen(true);
+  };
+
+  // Open modal to edit an existing product
+  const openEditProductModal = (item: ProductCatalogItem) => {
+    setEditingProductId(item.id);
+    const specEntries = Object.entries(item.specs).map(([key, value]) => ({ key, value }));
+    if (specEntries.length === 0) {
+      specEntries.push({ key: 'Dimensi', value: '' });
+    }
+    setProductForm({
+      name: item.name,
+      category: item.category,
+      shortDesc: item.shortDesc,
+      image: item.image || '',
+      specs: specEntries,
+      applications: item.applications.join(', '),
+      isFeatured: !!item.isFeatured
+    });
+    setIsProductFormOpen(true);
+  };
+
+  // Handle saving (Add or Edit)
+  const handleSaveProduct = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!productForm.name.trim()) {
+      alert('Mohon isi nama mesin.');
+      return;
+    }
+
+    // Convert specs array to object
+    const specsObj: { [key: string]: string } = {};
+    productForm.specs.forEach(s => {
+      if (s.key.trim() && s.value.trim()) {
+        specsObj[s.key.trim()] = s.value.trim();
+      }
+    });
+
+    // Parse applications
+    const appsList = productForm.applications
+      .split(',')
+      .map(a => a.trim())
+      .filter(a => a.length > 0);
+
+    const categoryLabel = getCategoryLabel(productForm.category);
+
+    if (editingProductId) {
+      // Update existing
+      setProducts(prev => prev.map(p => {
+        if (p.id === editingProductId) {
+          const updated: ProductCatalogItem = {
+            ...p,
+            name: productForm.name.trim(),
+            category: productForm.category,
+            categoryLabel,
+            shortDesc: productForm.shortDesc.trim(),
+            image: productForm.image.trim() || undefined,
+            specs: specsObj,
+            applications: appsList.length > 0 ? appsList : ['Industri & UMKM'],
+            isFeatured: productForm.isFeatured
+          };
+          if (selectedProduct?.id === editingProductId) {
+            setSelectedProduct(updated);
+          }
+          return updated;
+        }
+        return p;
+      }));
+      showToast(`Mesin "${productForm.name}" berhasil diperbarui!`);
+    } else {
+      // Create new
+      const newId = 'pmj-' + Date.now();
+      const newProduct: ProductCatalogItem = {
+        id: newId,
+        name: productForm.name.trim(),
+        category: productForm.category,
+        categoryLabel,
+        shortDesc: productForm.shortDesc.trim() || 'Mesin fabrikasi kustom berkualitas tinggi dari Pusat Mesin Jogya.',
+        image: productForm.image.trim() || undefined,
+        specs: Object.keys(specsObj).length > 0 ? specsObj : { 'Status': 'Siap Pesan Custom' },
+        applications: appsList.length > 0 ? appsList : ['Industri Manufaktur', 'UMKM'],
+        isFeatured: productForm.isFeatured
+      };
+      setProducts(prev => [newProduct, ...prev]);
+      showToast(`Mesin "${productForm.name}" berhasil ditambahkan ke katalog!`);
+    }
+
+    setIsProductFormOpen(false);
+  };
+
+  // Handle delete
+  const handleDeleteProduct = (id: string) => {
+    setProducts(prev => prev.filter(p => p.id !== id));
+    if (selectedProduct?.id === id) {
+      setSelectedProduct(null);
+    }
+    setDeleteConfirmProduct(null);
+    showToast('Mesin berhasil dihapus dari katalog.');
+  };
+
+  // Reset to default
+  const handleResetCatalog = () => {
+    if (window.confirm('Kembalikan seluruh katalog ke daftar produk default Pusat Mesin Jogya?')) {
+      setProducts(CATALOG_ITEMS);
+      localStorage.removeItem('pmj_products_catalog');
+      showToast('Katalog berhasil dikembalikan ke standar awal.');
+    }
+  };
+
+  // Spec row helpers
+  const handleAddSpecRow = () => {
+    setProductForm(prev => ({
+      ...prev,
+      specs: [...prev.specs, { key: '', value: '' }]
+    }));
+  };
+
+  const handleRemoveSpecRow = (index: number) => {
+    setProductForm(prev => ({
+      ...prev,
+      specs: prev.specs.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleSpecChange = (index: number, field: 'key' | 'value', val: string) => {
+    setProductForm(prev => ({
+      ...prev,
+      specs: prev.specs.map((s, i) => i === index ? { ...s, [field]: val } : s)
+    }));
+  };
+
   // Job Order Form State
   const [jobOrder, setJobOrder] = useState({
     companyName: '',
@@ -324,8 +553,8 @@ export default function App() {
 
   // Filter Catalog
   const filteredProducts = productCategory === 'all'
-    ? CATALOG_ITEMS
-    : CATALOG_ITEMS.filter(item => item.category === productCategory);
+    ? products
+    : products.filter(item => item.category === productCategory);
 
   return (
     <div className="min-h-screen bg-[#0a0f1d] text-slate-100 flex flex-col font-sans selection:bg-amber-500 selection:text-slate-950">
@@ -1001,21 +1230,64 @@ export default function App() {
         {activeTab === 'products' && (
           <section className="py-16 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
             
-            {/* Header & Filter Controls */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-slate-800 pb-8">
+            {/* Header, Management Mode Toggle & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 border-b border-slate-800 pb-8">
               <div className="space-y-2">
-                <div className="text-xs font-mono text-amber-400 font-semibold uppercase tracking-wider">
-                  Katalog Mesin & Peralatan
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-amber-400 font-semibold uppercase tracking-wider">
+                    Katalog Mesin & Peralatan
+                  </span>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    {products.length} Mesin Tersedia
+                  </span>
                 </div>
                 <h1 className="text-3xl font-extrabold text-white tracking-tight">
                   Our Products & Machinery
                 </h1>
                 <p className="text-sm text-slate-300 max-w-2xl">
-                  Katalog mesin perkakas dan mesin produksi fabrikasi Pusat Mesin Jogya. Setiap unit dapat disesuaikan spesifikasi teknisnya sesuai kebutuhan khusus Anda.
+                  Katalog mesin perkakas dan mesin produksi fabrikasi Pusat Mesin Jogya. Anda dapat menambahkan produk baru, mengedit spesifikasi, atau menghapus mesin dari katalog ini.
                 </p>
               </div>
 
-              {/* Functional Category Filter (Constitution 1.A DO rule) */}
+              {/* Management Mode Bar */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  onClick={() => setIsManageMode(!isManageMode)}
+                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer border ${
+                    isManageMode
+                      ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-500/20'
+                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white hover:border-slate-600'
+                  }`}
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span>{isManageMode ? 'Selesai Mengelola' : 'Kelola Produk (Edit/Tambah/Hapus)'}</span>
+                </button>
+
+                {isManageMode && (
+                  <>
+                    <button
+                      onClick={openAddProductModal}
+                      className="px-3.5 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Tambah Mesin Baru</span>
+                    </button>
+
+                    <button
+                      onClick={handleResetCatalog}
+                      title="Kembalikan ke katalog awal default"
+                      className="px-3 py-2 text-xs font-medium text-slate-300 bg-slate-900 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Reset Default</span>
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Filter Controls Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-900 border border-slate-800 rounded-lg">
                 {[
                   { id: 'all', label: 'Semua Produk' },
@@ -1038,110 +1310,166 @@ export default function App() {
                   </button>
                 ))}
               </div>
+
+              {isManageMode && (
+                <div className="text-xs font-mono text-amber-300/90 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span>Mode Kelola Aktif: Tombol Edit & Hapus tersedia pada setiap mesin</span>
+                </div>
+              )}
             </div>
 
             {/* Product Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProducts.map((product) => (
-                <div 
-                  key={product.id}
-                  className={`bg-slate-900/90 border rounded-xl p-6 flex flex-col justify-between transition-all ${
-                    product.isFeatured ? 'border-amber-500/60 shadow-lg shadow-amber-500/5' : 'border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="space-y-4">
-                    {/* Header line */}
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-mono text-amber-400 font-medium">
-                        {product.categoryLabel}
-                      </span>
-                      {product.isFeatured && (
-                        <span className="px-2 py-0.5 rounded bg-amber-400/10 text-amber-300 font-mono text-[10px] border border-amber-400/30">
-                          UNGGULAN
-                        </span>
-                      )}
-                    </div>
-
-                    <div>
-                      <h3 className="text-lg font-bold text-white">
-                        {product.name}
-                      </h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-                        {product.shortDesc}
-                      </p>
-                    </div>
-
-                    {/* Image preview for featured products */}
-                    {product.image && (
-                      <div className="relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-44 group">
-                        <img
-                          src={product.image}
-                          alt={product.name}
-                          className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
-                          referrerPolicy="no-referrer"
-                        />
-                        <div className="absolute top-2 left-2 px-2.5 py-0.5 rounded bg-slate-950/85 backdrop-blur text-[10px] font-mono text-amber-300 border border-amber-500/40">
-                          As 80 mm · Stroke 100 cm
-                        </div>
-                        <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-bold">
-                          Foto Unit Riil
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Technical Specs Snapshot */}
-                    <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80 space-y-1.5 text-xs">
-                      <span className="text-[10px] font-mono text-slate-400 block uppercase">Spesifikasi Utama:</span>
-                      {Object.entries(product.specs).slice(0, 4).map(([key, val], idx) => (
-                        <div key={idx} className="flex items-center justify-between gap-2 text-[11px]">
-                          <span className="text-slate-400">{key}:</span>
-                          <span className="font-mono text-slate-200 text-right">{val}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Application Tags (Unboxed per Constitution 1.A) */}
-                    <div className="pt-2 text-[11px] text-slate-400 space-y-1">
-                      <span className="block text-[10px] uppercase font-mono text-slate-400">Aplikasi Penggunaan:</span>
-                      <div className="flex flex-wrap gap-x-2 gap-y-1">
-                        {product.applications.map((app, i) => (
-                          <span key={i} className="text-slate-300">
-                            {app}{i < product.applications.length - 1 ? ' ·' : ''}
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-16 bg-slate-900/40 border border-slate-800 rounded-xl space-y-4">
+                <p className="text-slate-400 text-sm">Tidak ada produk mesin pada kategori ini.</p>
+                {isManageMode && (
+                  <button
+                    onClick={openAddProductModal}
+                    className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-colors cursor-pointer"
+                  >
+                    + Tambah Mesin ke Kategori Ini
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProducts.map((product) => (
+                  <div 
+                    key={product.id}
+                    className={`bg-slate-900/90 border rounded-xl p-6 flex flex-col justify-between transition-all relative ${
+                      product.isFeatured ? 'border-amber-500/60 shadow-lg shadow-amber-500/5' : 'border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="space-y-4">
+                      {/* Top Action Ribbon in Manage Mode */}
+                      {isManageMode && (
+                        <div className="flex items-center justify-between pb-2.5 mb-1 border-b border-amber-500/30 bg-amber-500/10 -mx-6 -mt-6 px-4 pt-3 rounded-t-xl">
+                          <span className="text-[11px] font-mono text-amber-400 font-semibold flex items-center gap-1">
+                            <Sliders className="w-3 h-3" />
+                            KONTROL ADMIN
                           </span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => openEditProductModal(product)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Edit Mesin Ini"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirmProduct(product)}
+                              className="px-2.5 py-1 text-[11px] font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded flex items-center gap-1 cursor-pointer transition-colors"
+                              title="Hapus Mesin Ini"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Hapus</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Header line */}
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-mono text-amber-400 font-medium">
+                          {product.categoryLabel}
+                        </span>
+                        {product.isFeatured && (
+                          <span className="px-2 py-0.5 rounded bg-amber-400/10 text-amber-300 font-mono text-[10px] border border-amber-400/30">
+                            UNGGULAN
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="text-lg font-bold text-white">
+                          {product.name}
+                        </h3>
+                        <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                          {product.shortDesc}
+                        </p>
+                      </div>
+
+                      {/* Image preview for products with image */}
+                      {product.image && (
+                        <div className="relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-44 group">
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-amber-400 text-slate-950 text-[10px] font-mono font-bold">
+                            Foto Unit
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Technical Specs Snapshot */}
+                      <div className="p-3 rounded-lg bg-slate-950/70 border border-slate-800/80 space-y-1.5 text-xs">
+                        <span className="text-[10px] font-mono text-slate-400 block uppercase">Spesifikasi Utama:</span>
+                        {Object.entries(product.specs).slice(0, 4).map(([key, val], idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-2 text-[11px]">
+                            <span className="text-slate-400">{key}:</span>
+                            <span className="font-mono text-slate-200 text-right">{val}</span>
+                          </div>
                         ))}
                       </div>
+
+                      {/* Application Tags */}
+                      <div className="pt-2 text-[11px] text-slate-400 space-y-1">
+                        <span className="block text-[10px] uppercase font-mono text-slate-400">Aplikasi Penggunaan:</span>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                          {product.applications.map((app, i) => (
+                            <span key={i} className="text-slate-300">
+                              {app}{i < product.applications.length - 1 ? ' ·' : ''}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-6 mt-6 border-t border-slate-800 flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setJobOrder(prev => ({
+                            ...prev,
+                            machineType: product.name,
+                            machineFunction: product.shortDesc,
+                            capacityTarget: product.specs['Kapasitas'] || product.specs['Gaya Tekan'] || 'Sesuai spesifikasi standar',
+                            dimensions: product.specs['Dimensi'] || 'Sesuai standar',
+                            powerPreference: product.specs['Penggerak'] || product.specs['Motor'] || 'Listrik / Diesel'
+                          }));
+                          setActiveTab('job-order');
+                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                        }}
+                        className="flex-1 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded transition-colors text-center cursor-pointer"
+                      >
+                        Ajukan Job Order
+                      </button>
+                      
+                      <button
+                        onClick={() => setSelectedProduct(product)}
+                        className="px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
+                      >
+                        Detail
+                      </button>
+
+                      {isManageMode && (
+                        <button
+                          onClick={() => openEditProductModal(product)}
+                          className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded border border-slate-700 transition-colors cursor-pointer"
+                          title="Edit Produk"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
-
-                  <div className="pt-6 mt-6 border-t border-slate-800 flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setJobOrder(prev => ({
-                          ...prev,
-                          machineType: product.name,
-                          machineFunction: product.shortDesc,
-                          capacityTarget: product.specs['Kapasitas'] || product.specs['Gaya Tekan'] || 'Sesuai spesifikasi standar',
-                          dimensions: product.specs['Dimensi'] || 'Sesuai standar',
-                          powerPreference: product.specs['Penggerak'] || product.specs['Motor'] || 'Listrik / Diesel'
-                        }));
-                        setActiveTab('job-order');
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className="flex-1 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded transition-colors text-center cursor-pointer"
-                    >
-                      Ajukan Job Order
-                    </button>
-                    
-                    <button
-                      onClick={() => setSelectedProduct(product)}
-                      className="px-3 py-2 text-xs font-medium text-slate-300 bg-slate-800 hover:text-white rounded border border-slate-700 transition-colors cursor-pointer"
-                    >
-                      Detail
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
 
             {/* Custom Request Banner */}
             <div className="p-8 rounded-xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-6">
@@ -1862,33 +2190,305 @@ export default function App() {
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+            <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => openEditProductModal(selectedProduct)}
+                  className="px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-amber-400 bg-slate-800/80 hover:bg-slate-800 rounded border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>Edit Mesin Ini</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setDeleteConfirmProduct(selectedProduct);
+                  }}
+                  className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-950/50 rounded border border-rose-800/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Hapus</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setSelectedProduct(null)}
+                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={() => {
+                    setJobOrder(prev => ({
+                      ...prev,
+                      machineType: selectedProduct.name,
+                      machineFunction: selectedProduct.shortDesc,
+                      capacityTarget: selectedProduct.specs['Kapasitas'] || selectedProduct.specs['Gaya Tekan'] || 'Standar',
+                      dimensions: selectedProduct.specs['Dimensi'] || 'Sesuai standar',
+                      powerPreference: selectedProduct.specs['Penggerak'] || selectedProduct.specs['Motor'] || 'Listrik/Diesel'
+                    }));
+                    setSelectedProduct(null);
+                    setActiveTab('job-order');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="px-5 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded transition-colors cursor-pointer"
+                >
+                  Pesan / Kustomisasi Mesin Ini
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: ADD / EDIT PRODUCT FORM
+      ========================================================================= */}
+      {isProductFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-6 shadow-2xl">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800 pb-4">
+              <div>
+                <span className="text-xs font-mono text-amber-400 font-semibold uppercase">
+                  {editingProductId ? 'EDIT SPESIFIKASI PRODUK' : 'TAMBAH PRODUK BARU'}
+                </span>
+                <h3 className="text-xl font-bold text-white mt-0.5">
+                  {editingProductId ? `Edit: ${productForm.name}` : 'Tambah Mesin Baru ke Katalog'}
+                </h3>
+              </div>
               <button
-                onClick={() => setSelectedProduct(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-300 hover:text-white"
+                onClick={() => setIsProductFormOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-sm font-bold cursor-pointer"
               >
-                Tutup
+                ✕
+              </button>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveProduct} className="space-y-5">
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Nama Mesin <span className="text-amber-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={productForm.name}
+                    onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
+                    placeholder="Contoh: Mesin Pencacah Plastik Crusher PMJ-30"
+                    className="w-full px-3.5 py-2 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Kategori Mesin <span className="text-amber-400">*</span>
+                  </label>
+                  <select
+                    value={productForm.category}
+                    onChange={(e) => setProductForm({ ...productForm, category: e.target.value as any })}
+                    className="w-full px-3.5 py-2 rounded bg-slate-950 border border-slate-700 text-xs text-white focus:outline-none focus:border-amber-400"
+                  >
+                    <option value="press">Mesin Press & Daur Ulang</option>
+                    <option value="perkakas">Mesin Perkakas</option>
+                    <option value="pangan">Pengolahan Pangan</option>
+                    <option value="pertanian">Pertanian & Agro</option>
+                    <option value="otomasi">Otomasi & Konveyor</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center pt-6">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={productForm.isFeatured}
+                      onChange={(e) => setProductForm({ ...productForm, isFeatured: e.target.checked })}
+                      className="w-4 h-4 rounded border-slate-700 text-amber-500 focus:ring-amber-400 bg-slate-950"
+                    />
+                    <span>Tampilkan sebagai Produk Unggulan</span>
+                  </label>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                    Deskripsi Singkat Mesin
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={productForm.shortDesc}
+                    onChange={(e) => setProductForm({ ...productForm, shortDesc: e.target.value })}
+                    placeholder="Jelaskan fungsi utama dan keunggulan mesin ini secara ringkas..."
+                    className="w-full px-3.5 py-2 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 space-y-2">
+                  <label className="block text-xs font-medium text-slate-300">
+                    Gambar / Foto Mesin (Opsional)
+                  </label>
+                  <input
+                    type="text"
+                    value={productForm.image}
+                    onChange={(e) => setProductForm({ ...productForm, image: e.target.value })}
+                    placeholder="URL gambar foto mesin atau path aset..."
+                    className="w-full px-3.5 py-2 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setProductForm({ ...productForm, image: ballPressImage })}
+                      className="px-2.5 py-1 text-[11px] font-mono text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded cursor-pointer"
+                    >
+                      Gunakan Foto Preset Ball Press
+                    </button>
+                    {productForm.image && (
+                      <button
+                        type="button"
+                        onClick={() => setProductForm({ ...productForm, image: '' })}
+                        className="px-2.5 py-1 text-[11px] font-mono text-slate-400 hover:text-white bg-slate-800 rounded cursor-pointer"
+                      >
+                        Hapus Foto
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Dynamic Technical Specifications */}
+              <div className="space-y-3 pt-3 border-t border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white uppercase font-mono">Spesifikasi Teknis</h4>
+                    <p className="text-[11px] text-slate-400">Atur parameter spesifikasi (Dimensi, Rangka, Penggerak, Daya, Boom, dll)</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddSpecRow}
+                    className="px-3 py-1.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Tambah Baris</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {productForm.specs.map((row, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={row.key}
+                        onChange={(e) => handleSpecChange(idx, 'key', e.target.value)}
+                        placeholder="Nama Spec (e.g. Dimensi)"
+                        className="w-1/3 px-3 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                      />
+                      <input
+                        type="text"
+                        value={row.value}
+                        onChange={(e) => handleSpecChange(idx, 'value', e.target.value)}
+                        placeholder="Nilai (e.g. 90 × 90 × 350 cm)"
+                        className="flex-1 px-3 py-1.5 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSpecRow(idx)}
+                        disabled={productForm.specs.length <= 1}
+                        className="p-1.5 text-slate-400 hover:text-rose-400 disabled:opacity-30 disabled:cursor-not-allowed rounded hover:bg-slate-800 transition-colors cursor-pointer"
+                        title="Hapus baris ini"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Applications Tags */}
+              <div className="pt-3 border-t border-slate-800">
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Aplikasi / Komoditas Penggunaan (Pisahkan dengan koma)
+                </label>
+                <input
+                  type="text"
+                  value={productForm.applications}
+                  onChange={(e) => setProductForm({ ...productForm, applications: e.target.value })}
+                  placeholder="Contoh: Daur Ulang Botol PET, Bank Sampah, Pabrik Kardus"
+                  className="w-full px-3.5 py-2 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsProductFormOpen(false)}
+                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingProductId ? 'Simpan Perubahan' : 'Tambahkan ke Katalog'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: DELETE CONFIRMATION DIALOG
+      ========================================================================= */}
+      {deleteConfirmProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="w-10 h-10 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-bold text-white">Konfirmasi Hapus Mesin</h3>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Apakah Anda yakin ingin menghapus mesin <strong className="text-white">"{deleteConfirmProduct.name}"</strong> dari katalog produk?
+            </p>
+
+            <div className="p-3 rounded bg-slate-950 border border-slate-800 text-[11px] text-slate-400">
+              Tips: Anda dapat mengembalikan mesin-mesin default kapan saja dengan menekan tombol <strong>Reset Default</strong> di mode kelola.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setDeleteConfirmProduct(null)}
+                className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white cursor-pointer"
+              >
+                Batal
               </button>
               <button
-                onClick={() => {
-                  setJobOrder(prev => ({
-                    ...prev,
-                    machineType: selectedProduct.name,
-                    machineFunction: selectedProduct.shortDesc,
-                    capacityTarget: selectedProduct.specs['Kapasitas'] || selectedProduct.specs['Gaya Tekan'] || 'Standar',
-                    dimensions: selectedProduct.specs['Dimensi'] || 'Sesuai standar',
-                    powerPreference: selectedProduct.specs['Penggerak'] || selectedProduct.specs['Motor'] || 'Listrik/Diesel'
-                  }));
-                  setSelectedProduct(null);
-                  setActiveTab('job-order');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="px-5 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded transition-colors"
+                onClick={() => handleDeleteProduct(deleteConfirmProduct.id)}
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-500 rounded transition-colors flex items-center gap-1.5 cursor-pointer shadow-md"
               >
-                Pesan / Kustomisasi Mesin Ini
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Ya, Hapus Mesin</span>
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          TOAST FEEDBACK NOTIFICATION
+      ========================================================================= */}
+      {toastMessage && (
+        <div className="fixed bottom-6 left-6 z-50 bg-slate-900/95 border border-amber-400/60 text-slate-100 px-4 py-3 rounded-lg shadow-2xl backdrop-blur flex items-center gap-2.5 animate-slide-up text-xs font-medium">
+          <CheckCircle2 className="w-4 h-4 text-amber-400 shrink-0" />
+          <span>{toastMessage}</span>
         </div>
       )}
 
