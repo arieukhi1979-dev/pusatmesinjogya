@@ -1,0 +1,8 @@
+{
+  "name": "Pusat Mesin Jogya",
+  "description": "Solusi mesin perkakas presisi dan rekayasa pembuatan mesin custom untuk industri dan UMKM di Yogyakarta. Konsultasi, desain CAD 3D, fabrikasi, hingga mesin siap pakai.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
