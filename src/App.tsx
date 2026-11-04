@@ -36,7 +36,13 @@ import {
   Trash2,
   RotateCcw,
   AlertTriangle,
-  Check
+  Check,
+  Lock,
+  Unlock,
+  KeyRound,
+  Eye,
+  EyeOff,
+  LogOut
 } from 'lucide-react';
 
 import ballPressImage from './assets/images/hydraulic_ball_press_machine_1793693229906.jpg';
@@ -307,12 +313,73 @@ export default function App() {
     }
   }, [products]);
 
-  // Management (Admin) Mode State
-  const [isManageMode, setIsManageMode] = useState<boolean>(false);
+  // Management (Admin) Mode State with Password Authentication
+  const [isAdminLoggedIn, setIsAdminLoggedIn] = useState<boolean>(() => {
+    try {
+      return sessionStorage.getItem('pmj_admin_auth') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+
+  const [isChangePasswordModalOpen, setIsChangePasswordModalOpen] = useState<boolean>(false);
+  const [newPasswordInput, setNewPasswordInput] = useState<string>('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState<string>('');
+  const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
+
   const [isProductFormOpen, setIsProductFormOpen] = useState<boolean>(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<ProductCatalogItem | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Admin Login Handler
+  const handleAdminLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const storedPassword = localStorage.getItem('pmj_admin_password') || 'adminpmj';
+
+    if (loginPassword === storedPassword) {
+      sessionStorage.setItem('pmj_admin_auth', 'true');
+      setIsAdminLoggedIn(true);
+      setIsLoginModalOpen(false);
+      setLoginPassword('');
+      setLoginError(null);
+      showToast('Login Admin berhasil! Akses kelola katalog dibuka.');
+    } else {
+      setLoginError('Password salah. Silakan coba lagi (Default: adminpmj).');
+    }
+  };
+
+  // Admin Logout Handler
+  const handleAdminLogout = () => {
+    sessionStorage.removeItem('pmj_admin_auth');
+    setIsAdminLoggedIn(false);
+    showToast('Mode Admin telah dikunci kembali (Logout).');
+  };
+
+  // Change Password Handler
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPasswordInput || newPasswordInput.length < 4) {
+      setChangePasswordError('Password baru minimal 4 karakter.');
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      setChangePasswordError('Konfirmasi password tidak cocok.');
+      return;
+    }
+
+    localStorage.setItem('pmj_admin_password', newPasswordInput);
+    setIsChangePasswordModalOpen(false);
+    setNewPasswordInput('');
+    setConfirmPasswordInput('');
+    setChangePasswordError(null);
+    showToast('Password admin berhasil diubah!');
+  };
 
   // Form State for Adding / Editing Product
   const [productForm, setProductForm] = useState<{
@@ -1249,22 +1316,27 @@ export default function App() {
                 </p>
               </div>
 
-              {/* Management Mode Bar */}
+              {/* Management / Admin Bar */}
               <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  onClick={() => setIsManageMode(!isManageMode)}
-                  className={`px-3.5 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer border ${
-                    isManageMode
-                      ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-lg shadow-amber-500/20'
-                      : 'bg-slate-900 text-slate-300 border-slate-700 hover:text-white hover:border-slate-600'
-                  }`}
-                >
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>{isManageMode ? 'Selesai Mengelola' : 'Kelola Produk (Edit/Tambah/Hapus)'}</span>
-                </button>
-
-                {isManageMode && (
+                {!isAdminLoggedIn ? (
+                  <button
+                    onClick={() => {
+                      setLoginError(null);
+                      setLoginPassword('');
+                      setIsLoginModalOpen(true);
+                    }}
+                    className="px-3.5 py-2 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 cursor-pointer bg-slate-900 text-slate-300 border border-slate-700 hover:text-white hover:border-amber-400/60 hover:bg-slate-800 shadow-sm"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Login Admin (Kelola Katalog)</span>
+                  </button>
+                ) : (
                   <>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-mono font-medium">
+                      <Unlock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Admin Aktif</span>
+                    </div>
+
                     <button
                       onClick={openAddProductModal}
                       className="px-3.5 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-lg transition-all flex items-center gap-1.5 shadow-md shadow-emerald-500/20 cursor-pointer"
@@ -1274,12 +1346,35 @@ export default function App() {
                     </button>
 
                     <button
+                      onClick={() => {
+                        setChangePasswordError(null);
+                        setNewPasswordInput('');
+                        setConfirmPasswordInput('');
+                        setIsChangePasswordModalOpen(true);
+                      }}
+                      title="Ganti Password Admin"
+                      className="px-3 py-2 text-xs font-medium text-slate-300 bg-slate-900 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="hidden sm:inline">Ubah Password</span>
+                    </button>
+
+                    <button
                       onClick={handleResetCatalog}
                       title="Kembalikan ke katalog awal default"
                       className="px-3 py-2 text-xs font-medium text-slate-300 bg-slate-900 hover:text-white hover:bg-slate-800 rounded-lg border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                       <span className="hidden sm:inline">Reset Default</span>
+                    </button>
+
+                    <button
+                      onClick={handleAdminLogout}
+                      title="Kunci kembali katalog (Logout)"
+                      className="px-3 py-2 text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-950/60 rounded-lg border border-rose-800/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Logout</span>
                     </button>
                   </>
                 )}
@@ -1311,10 +1406,10 @@ export default function App() {
                 ))}
               </div>
 
-              {isManageMode && (
+              {isAdminLoggedIn && (
                 <div className="text-xs font-mono text-amber-300/90 flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                  <span>Mode Kelola Aktif: Tombol Edit & Hapus tersedia pada setiap mesin</span>
+                  <span>Mode Admin Aktif: Tombol Edit & Hapus tersedia pada setiap mesin</span>
                 </div>
               )}
             </div>
@@ -1323,7 +1418,7 @@ export default function App() {
             {filteredProducts.length === 0 ? (
               <div className="text-center py-16 bg-slate-900/40 border border-slate-800 rounded-xl space-y-4">
                 <p className="text-slate-400 text-sm">Tidak ada produk mesin pada kategori ini.</p>
-                {isManageMode && (
+                {isAdminLoggedIn && (
                   <button
                     onClick={openAddProductModal}
                     className="px-4 py-2 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-colors cursor-pointer"
@@ -1342,11 +1437,11 @@ export default function App() {
                     }`}
                   >
                     <div className="space-y-4">
-                      {/* Top Action Ribbon in Manage Mode */}
-                      {isManageMode && (
+                      {/* Top Action Ribbon in Admin Mode */}
+                      {isAdminLoggedIn && (
                         <div className="flex items-center justify-between pb-2.5 mb-1 border-b border-amber-500/30 bg-amber-500/10 -mx-6 -mt-6 px-4 pt-3 rounded-t-xl">
                           <span className="text-[11px] font-mono text-amber-400 font-semibold flex items-center gap-1">
-                            <Sliders className="w-3 h-3" />
+                            <Unlock className="w-3 h-3" />
                             KONTROL ADMIN
                           </span>
                           <div className="flex items-center gap-1.5">
@@ -1456,7 +1551,7 @@ export default function App() {
                         Detail
                       </button>
 
-                      {isManageMode && (
+                      {isAdminLoggedIn && (
                         <button
                           onClick={() => openEditProductModal(product)}
                           className="p-2 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded border border-slate-700 transition-colors cursor-pointer"
@@ -2191,24 +2286,30 @@ export default function App() {
             </div>
 
             <div className="pt-4 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => openEditProductModal(selectedProduct)}
-                  className="px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-amber-400 bg-slate-800/80 hover:bg-slate-800 rounded border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  <span>Edit Mesin Ini</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setDeleteConfirmProduct(selectedProduct);
-                  }}
-                  className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-950/50 rounded border border-rose-800/40 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Hapus</span>
-                </button>
-              </div>
+              {isAdminLoggedIn ? (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditProductModal(selectedProduct)}
+                    className="px-3.5 py-2 text-xs font-semibold text-slate-300 hover:text-amber-400 bg-slate-800/80 hover:bg-slate-800 rounded border border-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    <span>Edit Mesin Ini</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setDeleteConfirmProduct(selectedProduct);
+                    }}
+                    className="px-3 py-2 text-xs font-semibold text-rose-400 hover:text-rose-300 bg-rose-950/30 hover:bg-rose-950/50 rounded border border-rose-800/40 transition-colors flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Hapus</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="text-[11px] font-mono text-slate-500">
+                  Pusat Mesin Jogya · Fabrikasi & Rekayasa Mesin
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <button
@@ -2478,6 +2579,212 @@ export default function App() {
                 <span>Ya, Hapus Mesin</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: ADMIN LOGIN DIALOG
+      ========================================================================= */}
+      {isLoginModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Login Admin Katalog Mesin</h3>
+                  <p className="text-[11px] text-slate-400">Akses khusus pengelola Pusat Mesin Jogya</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsLoginModalOpen(false);
+                  setLoginPassword('');
+                  setLoginError(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Silakan masukkan kata sandi administrator untuk mengaktifkan fitur <strong>Tambah Mesin</strong>, <strong>Edit Spesifikasi</strong>, dan <strong>Hapus Produk</strong> dari katalog.
+            </p>
+
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Password Administrator <span className="text-amber-400">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    autoFocus
+                    value={loginPassword}
+                    onChange={(e) => {
+                      setLoginPassword(e.target.value);
+                      if (loginError) setLoginError(null);
+                    }}
+                    placeholder="Masukkan password admin"
+                    className="w-full px-3.5 py-2.5 pr-10 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 cursor-pointer p-0.5"
+                    title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {loginError && (
+                <div className="p-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{loginError}</span>
+                </div>
+              )}
+
+              <div className="p-3 rounded bg-slate-950/80 border border-slate-800 text-[11px] text-slate-400 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-slate-300">Password Bawaan:</span>
+                  <button
+                    type="button"
+                    onClick={() => setLoginPassword('adminpmj')}
+                    className="text-amber-400 hover:underline cursor-pointer font-mono font-medium"
+                  >
+                    Gunakan: adminpmj
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  Setelah login, Anda dapat mengubah password ini kapan saja melalui tombol "Ubah Password".
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsLoginModalOpen(false);
+                    setLoginPassword('');
+                    setLoginError(null);
+                  }}
+                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20"
+                >
+                  <Unlock className="w-3.5 h-3.5" />
+                  <span>Masuk Mode Admin</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          MODAL: CHANGE ADMIN PASSWORD DIALOG
+      ========================================================================= */}
+      {isChangePasswordModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Ubah Password Admin</h3>
+                  <p className="text-[11px] text-slate-400">Perbarui kata sandi keamanan pengelola</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsChangePasswordModalOpen(false);
+                  setNewPasswordInput('');
+                  setConfirmPasswordInput('');
+                  setChangePasswordError(null);
+                }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 text-xs font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Password Baru <span className="text-amber-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPasswordInput}
+                  onChange={(e) => {
+                    setNewPasswordInput(e.target.value);
+                    if (changePasswordError) setChangePasswordError(null);
+                  }}
+                  placeholder="Minimal 4 karakter"
+                  className="w-full px-3.5 py-2.5 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                  Konfirmasi Password Baru <span className="text-amber-400">*</span>
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={confirmPasswordInput}
+                  onChange={(e) => {
+                    setConfirmPasswordInput(e.target.value);
+                    if (changePasswordError) setChangePasswordError(null);
+                  }}
+                  placeholder="Ulangi password baru"
+                  className="w-full px-3.5 py-2.5 rounded bg-slate-950 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 font-mono tracking-wider"
+                />
+              </div>
+
+              {changePasswordError && (
+                <div className="p-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{changePasswordError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsChangePasswordModalOpen(false);
+                    setNewPasswordInput('');
+                    setConfirmPasswordInput('');
+                    setChangePasswordError(null);
+                  }}
+                  className="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Simpan Password Baru</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
